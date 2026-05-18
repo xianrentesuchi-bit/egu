@@ -187,10 +187,11 @@
                 const card = document.createElement('div');
                 card.className = 'video-card';
                 
-                // サムネイルがない場合の処理
-                const thumbnailHtml = video.thumbnail 
-                    ? `<img src="${video.thumbnail}" alt="thumbnail" style="width:100%; height:140px; object-fit:cover;">`
-                    : `<div class="thumbnail-placeholder">No Image</div>`;
+                // 一意のIDを付与して後からサムネイルを差し替えられるようにする
+                const thumbnailContainerId = 'thumb-' + Math.random().toString(36).substr(2, 9);
+                
+                // 初期状態はNo Imageのプレースホルダー
+                const thumbnailHtml = `<div id="${thumbnailContainerId}" class="thumbnail-placeholder">Loading...</div>`;
 
                 card.innerHTML = `
                     ${thumbnailHtml}
@@ -206,7 +207,37 @@
                 });
 
                 videoGrid.appendChild(card);
+
+                // 各動画のサムネイルを非同期で取得して反映
+                fetchThumbnail(video.url, thumbnailContainerId);
             });
+        }
+
+        // サムネイルを取得して要素を差し替える関数
+        async function fetchThumbnail(videoUrl, elementId) {
+            const container = document.getElementById(elementId);
+            if (!container) return;
+
+            try {
+                const response = await fetch('/api/thumbnails', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ url: videoUrl })
+                });
+                const data = await response.json();
+
+                if (data.status === 'success' && data.thumbnails && data.thumbnails.length > 0) {
+                    // 取得できたサムネイル配列の1枚目をセット
+                    container.outerHTML = `<img src="${data.thumbnails[0]}" alt="thumbnail" style="width:100%; height:140px; object-fit:cover;">`;
+                } else {
+                    container.innerHTML = 'No Image';
+                }
+            } catch (error) {
+                console.error('Thumbnail fetch error:', error);
+                container.innerHTML = 'No Image';
+            }
         }
 
         // 動画ストリーム取得と再生
