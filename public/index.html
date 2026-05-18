@@ -187,24 +187,9 @@
                 const card = document.createElement('div');
                 card.className = 'video-card';
                 
-                // 動画URLからサムネイルURLを動的に生成する処理
-                let generatedThumbnail = null;
-                if (video.url) {
-                    // URLをスラッシュで分割して、video.xxxxxxx のようなID部分を抽出
-                    const urlParts = video.url.split('/');
-                    const videoIdPart = urlParts.find(part => part.startsWith('video.'));
-                    
-                    if (videoIdPart) {
-                        // "video."の文字を切り取って純粋なID（例: hmeudfm9bed）を取得
-                        const rawId = videoIdPart.replace('video.', '');
-                        // 指定された形式のベースURLに動画のIDをマッピングして生成
-                        generatedThumbnail = `https://encrypted-tbn0.gstatic.com/images?q=tbn:${rawId}`;
-                    }
-                }
-
-                // 生成されたサムネイルURLを使用（取得できない場合はプレースホルダー）
-                const thumbnailHtml = generatedThumbnail 
-                    ? `<img src="${generatedThumbnail}" alt="thumbnail" style="width:100%; height:140px; object-fit:cover;" onerror="this.onerror=null; this.parentElement.insertAdjacentHTML('afterbegin', '<div class=\'thumbnail-placeholder\'>No Image</div>'); this.remove();">`
+                // サムネイルがない場合の処理
+                const thumbnailHtml = video.thumbnail 
+                    ? `<img src="${video.thumbnail}" alt="thumbnail" style="width:100%; height:140px; object-fit:cover;">`
                     : `<div class="thumbnail-placeholder">No Image</div>`;
 
                 card.innerHTML = `
