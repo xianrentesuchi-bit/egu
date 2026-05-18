@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Search Player</title>
+    <!-- HLS.jsの読み込み -->
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #141414;
+            color: #ffffff;
+            margin: 0;
+            padding: 20px;
+        }
+        .search-container {
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        #search-input {
+            padding: 10px;
+            width: 300px;
+            font-size: 16px;
+            border-radius: 4px;
+            border: none;
+        }
+        #search-button {
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: #e50914;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .video-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 20px;
+            padding: 20px 0;
+        }
+        .video-card {
+            background-color: #1f1f1f;
+            border-radius: 8px;
+            overflow: hidden;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .video-card:hover {
+            transform: scale(1.03);
+        }
+        .thumbnail-placeholder {
+            width: 100%;
+            height: 140px;
+            background-color: #333;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #aaa;
+            font-size: 14px;
+        }
+        .video-info {
+            padding: 10px;
+        }
+        .video-title {
+            font-size: 14px;
+            font-weight: bold;
+            margin: 0 0 5px 0;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        .video-duration {
+            font-size: 12px;
+            color: #aaa;
+        }
+        /* モーダルプレイヤーのスタイル */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.9);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .modal-content {
+            position: relative;
+            width: 80%;
+            max-width: 800px;
+        }
+        video {
+            width: 100%;
+            border-radius: 4px;
+            outline: none;
+        }
+        .close-button {
+            position: absolute;
+            top: -40px;
+            right: 0;
+            color: white;
+            font-size: 30px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="search-container">
+        <input type="text" id="search-input" placeholder="検索キーワードを入力...">
+        <button id="search-button">検索</button>
+    </div>
+
+    <!-- 動画一覧を表示する場所 -->
+    <div class="video-grid" id="video-grid"></div>
+
+    <!-- 動画再生用モーダル -->
+    <div class="modal" id="video-modal">
+        <div class="modal-content">
+            <span class="close-button" id="close-button">&times;</span>
+            <video id="video-player" controls></video>
+        </div>
+    </div>
+
+    <script>
+        const searchInput = document.getElementById('search-input');
+        const searchButton = document.getElementById('search-button');
+        const videoGrid = document.getElementById('video-grid');
+        const videoModal = document.getElementById('video-modal');
+        const videoPlayer = document.getElementById('video-player');
+        const closeButton = document.getElementById('close-button');
+        
+        let hls = null;
+
+        // 検索ボタンクリックイベント
+        searchButton.addEventListener('click', () => {
+            const query = searchInput.value.trim();
+            if (query) {
+                searchVideos(query);
+            }
+        });
+
+        // エンターキーでの検索対応
+        searchInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                const query = searchInput.value.trim();
+                if (query) {
+                    searchVideos(query);
+                }
+            }
+        });
+
+        // 検索処理
+        async function searchVideos(query) {
+            videoGrid.innerHTML = '<p>検索中...</p>';
+            try {
+                const response = await fetch(`/api/search?q=${encodeURIComponent(query)}&page=1`);
+                const data = await response.json();
+                
+                displayResults(data);
+            } catch (error) {
+                console.error(error);
+                videoGrid.innerHTML = '<p>データの取得に失敗しました。</p>';
+            }
+        }
+
+        // 結果一覧の描写
+        function displayResults(videos) {
+            videoGrid.innerHTML = '';
+            
+            if (!videos || videos.length === 0) {
+                videoGrid.innerHTML = '<p>該当する結果が見つかりませんでした。</p>';
+                return;
+            }
+
+            videos.forEach(video => {
+                const card = document.createElement('div');
+                card.className = 'video-card';
+                
+                // サムネイルがない場合の処理
+                const thumbnailHtml = video.thumbnail 
+                    ? `<img src="${video.thumbnail}" alt="thumbnail" style="width:100%; height:140px; object-fit:cover;">`
+                    : `<div class="thumbnail-placeholder">No Image</div>`;
+
+                card.innerHTML = `
+                    ${thumbnailHtml}
+                    <div class="video-info">
+                        <div class="video-title" title="${video.title}">${video.title}</div>
+                        <div class="video-duration">${video.duration}</div>
+                    </div>
+                `;
+
+                // カードクリック時の動画再生処理
+                card.addEventListener('click', () => {
+                    playVideo(video.url);
+                });
+
+                videoGrid.appendChild(card);
+            });
+        }
+
+        // 動画ストリーム取得と再生
+        async function playVideo(targetUrl) {
+            try {
+                // バックエンド経由でストリームURLを取得
+                const response = await fetch(`/api/stream?url=${encodeURIComponent(targetUrl)}`);
+                const data = await response.json();
+
+                if (data.status === 'success' && data.stream_url) {
+                    const streamUrl = data.stream_url;
+                    
+                    // モーダルを表示
+                    videoModal.style.display = 'flex';
+
+                    // HLSの再生セットアップ
+                    if (Hls.isSupported()) {
+                        if (hls) {
+                            hls.destroy(); // 既存のインスタンスを破棄
+                        }
+                        hls = new Hls();
+                        hls.loadSource(streamUrl);
+                        hls.attachMedia(videoPlayer);
+                        hls.on(Hls.Events.MANIFEST_PARSED, function() {
+                            videoPlayer.play();
+                        });
+                    } 
+                    // SafariなどネイティブでHLS（m3u8）に対応しているブラウザ用
+                    else if (videoPlayer.canPlayType('application/vnd.apple.mpegurl')) {
+                        videoPlayer.src = streamUrl;
+                        videoPlayer.addEventListener('loadedmetadata', function() {
+                            videoPlayer.play();
+                        });
+                    } else {
+                        alert('お使いのブラウザはHLS再生（m3u8）に対応していません。');
+                    }
+
+                } else {
+                    alert('ストリームURLの取得に失敗しました。');
+                }
+            } catch (error) {
+                console.error(error);
+                alert('エラーが発生しました。');
+            }
+        }
+
+        // モーダルを閉じる処理
+        closeButton.addEventListener('click', () => {
+            videoModal.style.display = 'none';
+            videoPlayer.pause();
+            if (hls) {
+                hls.stopLoad();
+            }
+            videoPlayer.src = '';
+        });
+
+        // モーダルの外側をクリックしたら閉じる
+        window.addEventListener('click', (e) => {
+            if (e.target === videoModal) {
+                videoModal.style.display = 'none';
+                videoPlayer.pause();
+                if (hls) {
+                    hls.stopLoad();
+                }
+                videoPlayer.src = '';
+            }
+        });
+    </script>
+</body>
+</html>
