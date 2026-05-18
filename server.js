@@ -18,8 +18,29 @@ app.get('/api/search', async (req, res) => {
         // 外部の検索APIを呼び出し
         const targetUrl = `https://nyaa-rho.vercel.app/api/search?q=${encodeURIComponent(keyword)}&page=${page}`;
         const response = await axios.get(targetUrl);
+        const data = response.data;
+
+        // サムネイルがnullの場合に動画URLからサムネイルURLを生成してセットする処理
+        if (data && data.results && Array.isArray(data.results)) {
+            data.results = data.results.map(video => {
+                if (!video.thumbnail && video.url) {
+                    // xvideosのURLからID部分（video.xxxxxxx の xxxxxxx）を抽出する
+                    const match = video.url.match(/video\.([^/]+)/);
+                    if (match && match[1]) {
+                        const videoId = match[1];
+                        // 指定された形式のサムネイルURLを適用（IDをパラメータ等に付与、もしくは指定の固定URLに設定）
+                        // ここでは指定されたURLの形式に、識別可能な動画IDなどのパラメータ（&id=）を付加して生成します
+                        video.thumbnail = `https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRxHBNB_KIOXvqaeqck-wz2IuJefwu8w8P8K4A9BppJhvfIOz7bYA&s&id=${videoId}`;
+                    } else {
+                        // 抽出できない場合のデフォルトフォールバック
+                        video.thumbnail = `https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRxHBNB_KIOXvqaeqck-wz2IuJefwu8w8P8K4A9BppJhvfIOz7bYA&s`;
+                    }
+                }
+                return video;
+            });
+        }
         
-        res.json(response.data);
+        res.json(data);
     } catch (error) {
         console.error('Search API Error:', error.message);
         res.status(500).json({ error: '検索に失敗しました' });
