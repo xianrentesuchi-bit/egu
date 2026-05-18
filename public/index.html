@@ -162,7 +162,12 @@
                 const response = await fetch(`/api/search?q=${encodeURIComponent(query)}&page=1`);
                 const data = await response.json();
                 
-                displayResults(data);
+                // APIレスポンス内の results 配列を渡すように修正
+                if (data && data.success && data.results) {
+                    displayResults(data.results);
+                } else {
+                    videoGrid.innerHTML = '<p>該当する結果が見つかりませんでした。</p>';
+                }
             } catch (error) {
                 console.error(error);
                 videoGrid.innerHTML = '<p>データの取得に失敗しました。</p>';
